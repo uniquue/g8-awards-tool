@@ -8,3 +8,4 @@ header{background:#18251d;color:white;border-color:var(--border)}.brand-logo{wid
 
 /* Wrap budget explanations within the available page width. */
 #rules{max-width:none} .budget-explanations{table-layout:fixed;white-space:normal;width:100%}.budget-explanations th,.budget-explanations td{white-space:normal;overflow-wrap:anywhere;vertical-align:top;line-height:1.6}.budget-explanations th:first-child{width:24%}.budget-explanations th:nth-child(2){width:38%}.budget-explanations th:nth-child(3){width:38%}@media(max-width:600px){.budget-explanations td,.budget-explanations th{padding:8px 6px;font-size:12px}}
+@media(max-width:900px){header{height:auto;min-height:76px;flex-wrap:wrap;padding-top:12px;padding-bottom:12px}.cycle{display:flex!important;letter-spacing:.5px;font-size:10px}}
