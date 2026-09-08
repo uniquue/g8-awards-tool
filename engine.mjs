@@ -1,10 +1,16 @@
-export const defaults={rate:.024,ratingShare:.97,qsiLimit:.1,budget:null,mode:'weighted',baseGrade:11};
+export const defaults={rate:.024,supervisoryRate:.05,nrbRate:.1,ratingShare:.97,qsiLimit:.1,budget:null,mode:'weighted',baseGrade:11};
+export function budgetBreakdown(salary,settings={}) {
+ const s={...defaults,...settings},nrbRate=s.nrbRate??(1-s.ratingShare);
+ for(const [name,value] of [['rate',s.rate],['supervisoryRate',s.supervisoryRate],['nrbRate',nrbRate]])if(!Number.isFinite(value)||value<0||value>1)throw Error(`Invalid ${name}`);
+ const totalBudget=salary*s.rate,supervisoryBudget=totalBudget*s.supervisoryRate,afterSupervisory=totalBudget-supervisoryBudget,nrbBudget=afterSupervisory*nrbRate;
+ return {totalBudget,supervisoryBudget,nrbBudget,ratingBudget:afterSupervisory-nrbBudget};
+}
 export function calculate(employees,settings={}) {
  const s={...defaults,...settings}, errors=[];
  for(const [k,min,max] of [['rate',0,1],['ratingShare',0,1],['qsiLimit',0,1]]) if(!Number.isFinite(s[k])||s[k]<min||s[k]>max) throw Error(`Invalid ${k}`);
  const grades={};for(const e of employees){const a=grades[e.grade]??={sum:0,count:0};a.sum+=e.salary;a.count++;}
  const baseline=grades[s.baseGrade];if(s.mode==='weighted'&&!baseline)errors.push(`No grade ${s.baseGrade} employees: equal shares used. Choose a populated base grade to enable weighting.`);
- const totalSalary=employees.reduce((a,e)=>a+e.salary,0),ratingBudget=totalSalary*s.rate*s.ratingShare,nrbBudget=totalSalary*s.rate*(1-s.ratingShare);
+ const totalSalary=employees.reduce((a,e)=>a+e.salary,0),{totalBudget,supervisoryBudget,ratingBudget,nrbBudget}=budgetBreakdown(totalSalary,s);
  const budget=s.budget===null?Math.floor(ratingBudget):s.budget;
  if(!Number.isSafeInteger(budget)||budget<0)throw Error('Cash budget must be a nonnegative whole dollar amount.');
  const rows=employees.map(e=>{
@@ -21,7 +27,7 @@ export function calculate(employees,settings={}) {
  const cash=rows.reduce((a,e)=>a+e.cash,0),nrb=rows.reduce((a,e)=>a+e.nrb,0),qsi=rows.filter(e=>e.type==='QSI').length,qsiSlots=Math.floor(rows.length*s.qsiLimit);
  if(qsi>qsiSlots)errors.push(`${qsi} QSI selections exceed the ${qsiSlots} available slots.`);
  if(nrb>nrbBudget+.005)errors.push('NRB awards exceed the NRB budget.');if(budget>Math.floor(ratingBudget))errors.push('Selected cash budget exceeds the calculated rating-based budget.');
- return {rows,totalSalary,ratingBudget,nrbBudget,budget,cash,nrb,qsi,qsiSlots,unallocated:budget-cash,errors};
+ return {rows,totalSalary,totalBudget,supervisoryBudget,ratingBudget,nrbBudget,budget,cash,nrb,qsi,qsiSlots,unallocated:budget-cash,errors};
 }
 export function cellValue(c){const v=c && typeof c==='object' && 'value' in c ? c.value : c;if(v&&typeof v==='object'){if('result'in v)return v.result??'';if(v.richText)return v.richText.map(x=>x.text).join('');if(v.text)return v.text;return '';}return v??'';}
 export function parseWorkbook(wb,orgMap={}){
