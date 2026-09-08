@@ -22,12 +22,17 @@ export function calculate(employees,settings={}) {
   const hours=eligible?Math.round(40*(e.score/5)*time*proration*100)/100:0;
   return {...e,premium,shares,cashWeight,hours,cash:0,timeValue:Math.round(hours*e.salary/2080*100)/100};
  });
- const weight=rows.reduce((a,e)=>a+e.cashWeight,0);
- if(weight>0){let used=0;const order=[];rows.forEach((e,i)=>{const exact=e.cashWeight/weight*budget;e.cash=Math.floor(exact);used+=e.cash;if(e.cashWeight>0)order.push({i,f:exact-e.cash});});order.sort((a,b)=>b.f-a.f||a.i-b.i);for(let i=0;i<budget-used;i++)rows[order[i%order.length].i].cash++;}
+ const directorateBudgets={};
+ const groups=[...new Set(rows.map(e=>e.dir))].sort().map(dir=>{const members=rows.filter(e=>e.dir===dir),salary=members.reduce((n,e)=>n+e.salary,0),exact=totalSalary?budget*salary/totalSalary:0;return {dir,members,pool:Math.floor(exact),fraction:exact-Math.floor(exact)};});
+ const remainder=budget-groups.reduce((n,g)=>n+g.pool,0),ordered=[...groups].sort((a,b)=>b.fraction-a.fraction);
+ for(let i=0;i<remainder&&ordered.length;i++)ordered[i%ordered.length].pool++;
+ for(const g of groups){directorateBudgets[g.dir]=g.pool;const weight=g.members.reduce((n,e)=>n+e.cashWeight,0);if(!weight)continue;
+ let used=0;const order=[];g.members.forEach((e,i)=>{const exact=e.cashWeight/weight*g.pool;e.cash=Math.floor(exact);used+=e.cash;if(e.cashWeight>0)order.push({e,i,f:exact-e.cash});});order.sort((a,b)=>b.f-a.f||a.i-b.i);for(let i=0;i<g.pool-used;i++)order[i%order.length].e.cash++;
+ }
  const cash=rows.reduce((a,e)=>a+e.cash,0),nrb=rows.reduce((a,e)=>a+e.nrb,0),qsi=rows.filter(e=>e.type==='QSI').length,qsiSlots=Math.floor(rows.length*s.qsiLimit);
  if(qsi>qsiSlots)errors.push(`${qsi} QSI selections exceed the ${qsiSlots} available slots.`);
  if(nrb>nrbBudget+.005)errors.push('NRB awards exceed the NRB budget.');if(budget>Math.floor(ratingBudget))errors.push('Selected cash budget exceeds the calculated rating-based budget.');
- return {rows,totalSalary,totalBudget,supervisoryBudget,ratingBudget,nrbBudget,budget,cash,nrb,qsi,qsiSlots,unallocated:budget-cash,errors};
+ return {rows,directorateBudgets,totalSalary,totalBudget,supervisoryBudget,ratingBudget,nrbBudget,budget,cash,nrb,qsi,qsiSlots,unallocated:budget-cash,errors};
 }
 export function cellValue(c){const v=c && typeof c==='object' && 'value' in c ? c.value : c;if(v&&typeof v==='object'){if('result'in v)return v.result??'';if(v.richText)return v.richText.map(x=>x.text).join('');if(v.text)return v.text;return '';}return v??'';}
 export function parseWorkbook(wb,orgMap={}){
