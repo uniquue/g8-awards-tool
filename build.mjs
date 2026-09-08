@@ -8,6 +8,6 @@ if(!existsSync('esd-logo.png')){
 }
 if(createHash('sha256').update(readFileSync('esd-logo.png')).digest('hex')!=='13dc997373bed57b0b6867455e23aef873016051d3b5440048d03582b78d4a31')throw Error('Logo does not match the approved source');
 mkdirSync('dist',{recursive:true});
-for(const name of ['esd-logo.png','splash.js','index.html','app.mjs','engine.mjs','org-map.mjs','style.css','staticwebapp.config.json'])copyFileSync(name,`dist/${name}`);
+for(const name of ['esd-logo.png','splash.js','index.html','app.mjs','grade-summary.mjs','engine.mjs','org-map.mjs','style.css','staticwebapp.config.json'])copyFileSync(name,`dist/${name}`);
 copyFileSync('node_modules/exceljs/dist/exceljs.min.js','dist/exceljs.min.js');
 copyFileSync('node_modules/exceljs/LICENSE','dist/EXCELJS-LICENSE');
