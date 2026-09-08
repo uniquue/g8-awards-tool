@@ -1,4 +1,4 @@
-export const defaults={rate:.024,supervisoryRate:.05,nrbRate:.1,ratingShare:.97,qsiLimit:.1,budget:null,mode:'weighted',baseGrade:11};
+export const defaults={rate:.024,supervisoryRate:.05,nrbRate:.1,ratingShare:.97,qsiLimit:.1,budget:null,allocationMode:'separate',mode:'weighted',baseGrade:11};
 export function budgetBreakdown(salary,settings={}) {
  const s={...defaults,...settings},nrbRate=s.nrbRate??(1-s.ratingShare);
  for(const [name,value] of [['rate',s.rate],['supervisoryRate',s.supervisoryRate],['nrbRate',nrbRate]])if(!Number.isFinite(value)||value<0||value>1)throw Error(`Invalid ${name}`);
@@ -26,7 +26,9 @@ export function calculate(employees,settings={}) {
  const groups=[...new Set(rows.map(e=>e.dir))].sort().map(dir=>{const members=rows.filter(e=>e.dir===dir),salary=members.reduce((n,e)=>n+e.salary,0),exact=totalSalary?budget*salary/totalSalary:0;return {dir,members,pool:Math.floor(exact),fraction:exact-Math.floor(exact)};});
  const remainder=budget-groups.reduce((n,g)=>n+g.pool,0),ordered=[...groups].sort((a,b)=>b.fraction-a.fraction);
  for(let i=0;i<remainder&&ordered.length;i++)ordered[i%ordered.length].pool++;
- for(const g of groups){directorateBudgets[g.dir]=g.pool;const weight=g.members.reduce((n,e)=>n+e.cashWeight,0);if(!weight)continue;
+ for(const g of groups)directorateBudgets[g.dir]=g.pool;
+ const allocationGroups=s.allocationMode==='pooled'?[{members:rows,pool:budget}]:groups;
+ for(const g of allocationGroups){const weight=g.members.reduce((n,e)=>n+e.cashWeight,0);if(!weight)continue;
  let used=0;const order=[];g.members.forEach((e,i)=>{const exact=e.cashWeight/weight*g.pool;e.cash=Math.floor(exact);used+=e.cash;if(e.cashWeight>0)order.push({e,i,f:exact-e.cash});});order.sort((a,b)=>b.f-a.f||a.i-b.i);for(let i=0;i<g.pool-used;i++)order[i%order.length].e.cash++;
  }
  const cash=rows.reduce((a,e)=>a+e.cash,0),nrb=rows.reduce((a,e)=>a+e.nrb,0),qsi=rows.filter(e=>e.type==='QSI').length,qsiSlots=Math.floor(rows.length*s.qsiLimit);
