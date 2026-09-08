@@ -1,0 +1,37 @@
+export const defaults={rate:.024,ratingShare:.97,qsiLimit:.1,budget:null,mode:'weighted',baseGrade:11};
+export function calculate(employees,settings={}) {
+ const s={...defaults,...settings}, errors=[];
+ for(const [k,min,max] of [['rate',0,1],['ratingShare',0,1],['qsiLimit',0,1]]) if(!Number.isFinite(s[k])||s[k]<min||s[k]>max) throw Error(`Invalid ${k}`);
+ const grades={};for(const e of employees){const a=grades[e.grade]??={sum:0,count:0};a.sum+=e.salary;a.count++;}
+ const baseline=grades[s.baseGrade];if(s.mode==='weighted'&&!baseline)errors.push(`No grade ${s.baseGrade} employees: equal shares used. Choose a populated base grade to enable weighting.`);
+ const totalSalary=employees.reduce((a,e)=>a+e.salary,0),ratingBudget=totalSalary*s.rate*s.ratingShare,nrbBudget=totalSalary*s.rate*(1-s.ratingShare);
+ const budget=s.budget===null?Math.floor(ratingBudget):s.budget;
+ if(!Number.isSafeInteger(budget)||budget<0)throw Error('Cash budget must be a nonnegative whole dollar amount.');
+ const rows=employees.map(e=>{
+  if(!Number.isFinite(e.score)||e.score<0||e.score>5||!Number.isFinite(e.months)||e.months<0||e.months>12||!Number.isFinite(e.timeShare)||e.timeShare<0||e.timeShare>1||!Number.isFinite(e.nrb)||e.nrb<0)throw Error(`Invalid input on employee row ${e.sourceRow}`);
+  const eligible=e.score>=3&&e.type!=='None'&&e.type!=='QSI',proration=e.months/12;
+  const premium=s.mode==='weighted'&&baseline?(grades[e.grade].sum/grades[e.grade].count)/(baseline.sum/baseline.count):1;
+  const time=e.type==='Time off'?1:e.type==='Combined'?e.timeShare:0;
+  const shares=eligible?e.score*premium:0,cashWeight=shares*(1-time)*proration;
+  const hours=eligible?Math.round(40*(e.score/5)*time*proration*100)/100:0;
+  return {...e,premium,shares,cashWeight,hours,cash:0,timeValue:Math.round(hours*e.salary/2080*100)/100};
+ });
+ const weight=rows.reduce((a,e)=>a+e.cashWeight,0);
+ if(weight>0){let used=0;const order=[];rows.forEach((e,i)=>{const exact=e.cashWeight/weight*budget;e.cash=Math.floor(exact);used+=e.cash;if(e.cashWeight>0)order.push({i,f:exact-e.cash});});order.sort((a,b)=>b.f-a.f||a.i-b.i);for(let i=0;i<budget-used;i++)rows[order[i%order.length].i].cash++;}
+ const cash=rows.reduce((a,e)=>a+e.cash,0),nrb=rows.reduce((a,e)=>a+e.nrb,0),qsi=rows.filter(e=>e.type==='QSI').length,qsiSlots=Math.floor(rows.length*s.qsiLimit);
+ if(qsi>qsiSlots)errors.push(`${qsi} QSI selections exceed the ${qsiSlots} available slots.`);
+ if(nrb>nrbBudget+.005)errors.push('NRB awards exceed the NRB budget.');if(budget>Math.floor(ratingBudget))errors.push('Selected cash budget exceeds the calculated rating-based budget.');
+ return {rows,totalSalary,ratingBudget,nrbBudget,budget,cash,nrb,qsi,qsiSlots,unallocated:budget-cash,errors};
+}
+export function cellValue(c){const v=c && typeof c==='object' && 'value' in c ? c.value : c;if(v&&typeof v==='object'){if('result'in v)return v.result??'';if(v.richText)return v.richText.map(x=>x.text).join('');if(v.text)return v.text;return '';}return v??'';}
+export function parseWorkbook(wb,orgMap={}){
+ const ws=wb.getWorksheet('RAW-Data')||wb.worksheets[0];if(!ws)throw Error('Workbook has no worksheets.');
+ let header,cols={};for(let r=1;r<=Math.min(ws.rowCount,30);r++){const c={};ws.getRow(r).eachCell((v,n)=>c[String(cellValue(v)).trim().replace(/\s+/g,' ').toLowerCase()]=n);if(c['name pers']&&c['total salary']){header=r;cols=c;break;}}
+ if(!header)throw Error('Expected a RAW-Data sheet with Name Pers and Total Salary headers.');
+ const get=(r,k)=>cellValue(ws.getRow(r).getCell(cols[k.toLowerCase()]||1000));const employees=[];
+ for(let r=header+1;r<=ws.rowCount;r++){const name=String(get(r,'Name Pers')).trim();if(!name || name==='Name Pers')continue;const salary=Number(get(r,'Total Salary'));if(!Number.isFinite(salary)||salary<=0)throw Error(`Invalid salary on row ${r}.`);const rawScore=Number(get(r,'Rating')||0);if(!Number.isFinite(rawScore)||rawScore<0||rawScore>5)throw Error(`Invalid rating on row ${r}.`);const org=String(get(r,'Org Component'));const qsi=/^(yes|y)$/i.test(String(get(r,'QSI (Y or Blank)')));const toa=Number(get(r,'TOA'))||0;
+ employees.push({id:`row-${r}`,sourceRow:r,name,org,dir:orgMap[org]||String(cellValue(ws.getRow(r).getCell(1)))||'Unmapped',title:String(get(r,'Title')),plan:String(get(r,'PP')),series:String(get(r,'Series')).padStart(4,'0'),grade:Number(get(r,'GR')),salary:salary>1000?salary:salary*2087,rawScore,score:rawScore,type:qsi?'QSI':toa>0?'Time off':'Cash',timeShare:.5,months:12,nrb:Number(get(r,'NRB Awards Given'))||0,required:/^(y|yes)$/i.test(String(get(r,'Require Eval'))),completed:/^(y|yes)$/i.test(String(get(r,'Eval Completed'))),comments:String(get(r,'COMMENTS'))});}
+ if(!employees.length)throw Error('No employee records found.');
+ const settings={...defaults};for(const [k,addr]of [['rate','L3'],['ratingShare','Q2'],['qsiLimit','W3']]){const n=Number(cellValue(ws.getCell(addr)));if(n>0&&n<=1)settings[k]=n;}
+ return {employees,settings};
+}

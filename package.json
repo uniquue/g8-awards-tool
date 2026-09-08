@@ -1,0 +1,1 @@
+{"name":"g8-awards-tool","version":"1.0.0","private":true,"scripts":{"build":"node build.mjs"},"engines":{"node":"22.x"},"dependencies":{"exceljs":"4.4.0"}}
