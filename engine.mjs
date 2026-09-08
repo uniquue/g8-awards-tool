@@ -38,6 +38,11 @@ export function parseWorkbook(wb,orgMap={}){
  for(let r=header+1;r<=ws.rowCount;r++){const name=String(get(r,'Name Pers')).trim();if(!name || name==='Name Pers')continue;const salary=Number(get(r,'Total Salary'));if(!Number.isFinite(salary)||salary<=0)throw Error(`Invalid salary on row ${r}.`);const rawScore=Number(get(r,'Rating')||0);if(!Number.isFinite(rawScore)||rawScore<0||rawScore>5)throw Error(`Invalid rating on row ${r}.`);const org=String(get(r,'Org Component'));const qsi=/^(yes|y)$/i.test(String(get(r,'QSI (Y or Blank)')));const toa=Number(get(r,'TOA'))||0;
  employees.push({id:`row-${r}`,sourceRow:r,name,org,dir:orgMap[org]||String(cellValue(ws.getRow(r).getCell(1)))||'Unmapped',title:String(get(r,'Title')),plan:String(get(r,'PP')),series:String(get(r,'Series')).padStart(4,'0'),grade:Number(get(r,'GR')),salary:salary>1000?salary:salary*2087,rawScore,score:rawScore,type:qsi?'QSI':toa>0?'Time off':'Cash',timeShare:.5,months:12,nrb:Number(get(r,'NRB Awards Given'))||0,required:/^(y|yes)$/i.test(String(get(r,'Require Eval'))),completed:/^(y|yes)$/i.test(String(get(r,'Eval Completed'))),comments:String(get(r,'COMMENTS'))});}
  if(!employees.length)throw Error('No employee records found.');
- const settings={...defaults};for(const [k,addr]of [['rate','L3'],['ratingShare','Q2'],['qsiLimit','W3']]){const n=Number(cellValue(ws.getCell(addr)));if(n>0&&n<=1)settings[k]=n;}
+ const settings={...defaults};
+ const revised=Boolean(cols['supervisory budget']&&cols['awards budget']);
+ const locations=revised?[['rate','P5'],['supervisoryRate','Q5'],['ratingShare','S2'],['nrbRate','T2'],['qsiLimit','Y3']]:[['rate','L3'],['ratingShare','Q2'],['qsiLimit','W3']];
+ for(const [k,addr] of locations){const value=cellValue(ws.getCell(addr));if(value==='')continue;const n=Number(value);if(!Number.isFinite(n)||n<0||n>1)throw Error(`Invalid budget percentage in ${addr}.`);settings[k]=n;}
+ if(revised&&cellValue(ws.getCell('T2'))==='')settings.nrbRate=1-settings.ratingShare;
+
  return {employees,settings};
 }
