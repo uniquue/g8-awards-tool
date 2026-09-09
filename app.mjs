@@ -9,21 +9,26 @@ const $=id=>document.getElementById(id),money=n=>new Intl.NumberFormat('en-US',{
 const fiscalYear=()=>'FY'+String($('fiscalYear').value||2026).slice(-2);
 let employees=[],settings={},result,filename='',selectedDirs=new Set(),selectedReports=new Set(['QSI']);
 
+function organization(){const dirs=new Set(employees.map(e=>e.dir));const g8=['CD','HQ','PAED','EMD'].some(d=>dirs.has(d)),asa=['ABO','CE','FOI','Front Office'].some(d=>dirs.has(d));return {title:asa&&!g8?'ASA(FM&C) Awards Dashboard Tool':g8&&!asa?'G-8 Awards Dashboard Tool':'ESD’s Awards Tool',asa:asa&&!g8};}
+const orgText=[];
+if(document.createTreeWalker){const walker=document.createTreeWalker(document.querySelector('main'),4);let n;while(n=walker.nextNode())if(/directorate/i.test(n.textContent))orgText.push([n,n.textContent]);}
+function orgCopy(s){return organization().asa?s.replace(/Directorates/g,"DASA’s").replace(/directorates/g,"DASA’s").replace(/Directorate/g,'DASA').replace(/directorate/g,'DASA'):s;}
+function drawOrganization(){const org=organization();$('brand-title').textContent=org.title;$('dashboard-title').textContent=org.title;document.title=org.title;for(const [node,original] of orgText)if(node.isConnected)node.textContent=orgCopy(original);$('search').placeholder=org.asa?'Find a name or DASA':'Find a name or directorate';}
 const filters={'QSI':r=>r.type==='QSI','TOA':r=>r.hours>0,'TOA & Cash':r=>r.hours>0&&r.cash>0,'Cash Award below 5k':r=>r.cash>0&&r.cash<5000,'Cash Award between 5k to 9999':r=>r.cash>=5000&&r.cash<10000,'Cash Award above 10k':r=>r.cash>=10000};
 
 function summaryRows(source=result.rows,pools=result.directorateBudgets){return [...new Set(source.map(e=>e.dir))].sort().map(dir=>{const a=source.filter(e=>e.dir===dir),salary=a.reduce((v,e)=>v+e.salary,0),cash=a.reduce((v,e)=>v+e.cash,0),nrb=a.reduce((v,e)=>v+e.nrb,0),b=budgetBreakdown(salary,settings);return [dir,a.length,a.filter(e=>e.required).length,a.filter(e=>e.required&&e.completed).length,(pools[dir]??b.ratingBudget),cash,b.nrbBudget,nrb,a.reduce((v,e)=>v+e.hours,0),a.filter(e=>e.type==='QSI').length,(pools[dir]??b.ratingBudget)+b.nrbBudget-cash-nrb];});}
 
 const summaryHeaders=['Directorate','Employees','Eval required','Eval completed','Rating budget','Cash awards','NRB budget','NRB used','TOA hours','QSI','Remaining cash'];
 
-function table(headers,rows){return `<div class="tablewrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${headers.length}">No matching employees.</td></tr>`}</tbody></table></div>`;}
+function table(headers,rows){headers=headers.map(orgCopy);return `<div class="tablewrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${headers.length}">No matching employees.</td></tr>`}</tbody></table></div>`;}
 
 function scopedRows(){return result.rows.filter(e=>selectedDirs.has(e.dir));}
 
 function scopeLabel(){return selectedDirs.size?[...selectedDirs].sort().join(', '):'No directorates selected';}
 
-function drawChoices(){
+function drawChoices(){drawOrganization();
 
- $('directorates').innerHTML='<legend>Select one or more directorates</legend>'+[...new Set(employees.map(e=>e.dir))].sort().map(d=>`<label><input type="checkbox" value="${esc(d)}" ${selectedDirs.has(d)?'checked':''}>${esc(d)}</label>`).join('');
+ $('directorates').innerHTML='<legend>'+orgCopy('Select one or more directorates')+'</legend>'+[...new Set(employees.map(e=>e.dir))].sort().map(d=>`<label><input type="checkbox" value="${esc(d)}" ${selectedDirs.has(d)?'checked':''}>${esc(d)}</label>`).join('');
 
  $('report-choices').innerHTML='<legend>Select one or more reports</legend>'+Object.keys(filters).map(d=>`<label><input type="checkbox" value="${esc(d)}" ${selectedReports.has(d)?'checked':''}>${esc(d)}</label>`).join('');
 
@@ -46,7 +51,7 @@ function drawViews(){
 
  const summaries=summaryRows(rows);if(summaries.length)summaries.push(['Selected total',...summaryHeaders.slice(1).map((_,i)=>summaries.reduce((n,r)=>n+r[i+1],0))]);
 
- $('budget-view').innerHTML='<div class="toolbar"><h2>Directorate reconciliation</h2><button data-print="budget-view">Print card</button></div>'+table(summaryHeaders,summaries.map(r=>r.map((v,i)=>[4,5,6,7,10].includes(i)?money(v):typeof v==='number'?Math.round(v*100)/100:v)));
+ $('budget-view').innerHTML='<div class="toolbar"><h2>'+orgCopy('Directorate reconciliation')+'</h2><button data-print="budget-view">Print card</button></div>'+table(summaryHeaders,summaries.map(r=>r.map((v,i)=>[4,5,6,7,10].includes(i)?money(v):typeof v==='number'?Math.round(v*100)/100:v)));
 
  const grades=gradeSummary(result);$('budget-view').innerHTML+='<article id="grade-summary" class="report-card"><div class="toolbar"><h2>GS grade summary</h2><button data-print="grade-summary">Print grade summary</button></div><p class="small">'+esc(scopeLabel())+' · Cash award budgets are apportioned by salary and reconcile to the selected cash pool. Used amounts reflect current cash awards; negative remaining amounts indicate awards above that grade’s salary-based share. NRB and time off are excluded.</p>'+table(gradeHeaders,grades.map(r=>r.map((v,i)=>i>=2?money(v):v)))+'</article>';drawReport();
 
@@ -70,7 +75,7 @@ function printCard(id){
 
  clone.querySelectorAll('input,select').forEach(e=>{const span=document.createElement('span');span.textContent=e.value;e.replaceWith(span);});
 
- $('print-area').innerHTML=`<h1>G-8 Awards Workspace · ${fiscalYear()}</h1><p>${esc(scopeLabel())} · ${esc(filename)}</p>`;
+ $('print-area').innerHTML=`<h1>${esc(organization().title)} · ${fiscalYear()}</h1><p>${esc(scopeLabel())} · ${esc(filename)}</p>`;
 
  $('print-area').appendChild(clone);document.body.classList.add('printing');
 
@@ -102,11 +107,11 @@ $('employees').addEventListener('change',ev=>{const el=ev.target,k=el.dataset.fi
 
 for(const k of ['rate','supervisoryRate','nrbRate','qsiLimit','budget','mode','allocationMode','baseGrade'])$(k).addEventListener('change',()=>{const el=$(k);if(!el.checkValidity()){el.reportValidity();return;}const old=settings[k];settings[k]=['mode','allocationMode'].includes(k)?el.value:k==='budget'&&el.value===''?null:Number(el.value)/(['rate','supervisoryRate','nrbRate','qsiLimit'].includes(k)?100:1);try{draw();}catch(e){settings[k]=old;$('message').textContent=e.message;}});
 
-$('search').addEventListener('input',drawEmployees);$('clear').addEventListener('click',()=>{employees=[];result=null;filename='';selectedDirs.clear();selectedReports=new Set(['QSI']);finishPrint();$('workspace').hidden=true;$('upload').hidden=false;$('export').hidden=true;$('clear').hidden=true;$('message').textContent='';$('search').value='';});
+$('search').addEventListener('input',drawEmployees);$('clear').addEventListener('click',()=>{employees=[];drawOrganization();result=null;filename='';selectedDirs.clear();selectedReports=new Set(['QSI']);finishPrint();$('workspace').hidden=true;$('upload').hidden=false;$('export').hidden=true;$('clear').hidden=true;$('message').textContent='';$('search').value='';});
 
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['review','budget-view','reports','rules'])$(id).hidden=id!==(b.dataset.view==='budget'?'budget-view':b.dataset.view);}));
 
-$('export').addEventListener('click',async()=>{const button=$('export');button.disabled=true;try{const exportEmployees=settings.allocationMode==='pooled'?employees.filter(e=>selectedDirs.has(e.dir)):employees;const salary=exportEmployees.reduce((n,e)=>n+e.salary,0),agencySalary=employees.reduce((n,e)=>n+e.salary,0);const result=calculate(exportEmployees,{...settings,budget:settings.budget==null?null:Math.floor(settings.budget*(agencySalary?salary/agencySalary:0))});const wb=new ExcelJS.Workbook();wb.creator='G-8 Awards Workspace';wb.created=new Date();const add=(name,headers,rows)=>{const ws=wb.addWorksheet(name);ws.addRow(headers);rows.forEach(r=>ws.addRow(r));ws.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF214C3E'}};ws.views=[{state:'frozen',ySplit:1}];ws.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:headers.length}};ws.columns.forEach((c,i)=>{c.width=i===1?30:22;});return ws;};
+$('export').addEventListener('click',async()=>{const button=$('export');button.disabled=true;try{const exportEmployees=settings.allocationMode==='pooled'?employees.filter(e=>selectedDirs.has(e.dir)):employees;const salary=exportEmployees.reduce((n,e)=>n+e.salary,0),agencySalary=employees.reduce((n,e)=>n+e.salary,0);const result=calculate(exportEmployees,{...settings,budget:settings.budget==null?null:Math.floor(settings.budget*(agencySalary?salary/agencySalary:0))});const wb=new ExcelJS.Workbook();wb.creator=organization().title;wb.created=new Date();const add=(name,headers,rows)=>{const ws=wb.addWorksheet(name);ws.addRow(headers.map(orgCopy));rows.forEach(r=>ws.addRow(r));ws.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF214C3E'}};ws.views=[{state:'frozen',ySplit:1}];ws.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:headers.length}};ws.columns.forEach((c,i)=>{c.width=i===1?30:22;});return ws;};
 
 const headers=['Directorate','Name','Title','Pay Plan','Series','Grade','Salary','Raw score','Adjusted score','Shares','Award type','TOA percent','Months','Cash award','TOA hours','TOA value','Total value','NRB','Eval required','Eval completed','Comments'];const record=e=>[e.dir,e.name,e.title,e.plan,e.series,e.grade,e.salary,e.rawScore,e.score,e.shares,e.type,e.type==='Time off'?1:e.type==='Combined'?e.timeShare:0,e.months,e.cash,e.hours,e.timeValue,e.cash+e.timeValue,e.nrb,e.required?'Yes':'No',e.completed?'Yes':'No',e.comments];
 
